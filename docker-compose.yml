@@ -2,10 +2,11 @@ services:
   mysqldb:
     image: mysql:8.0
     container_name: lab_mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: lab_reservation
-      TZ: Asia/Shanghai  # <--- 修改1: 数据库容器设为北京时间
+      TZ: Asia/Shanghai
     volumes:
       - db_data:/var/lib/mysql
       - ./mysql/init:/docker-entrypoint-initdb.d
@@ -23,7 +24,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysqldb:3306/lab_reservation?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: rootpassword
-      TZ: Asia/Shanghai  # <--- 修改3: Java 后端容器设为北京时间
+      TZ: Asia/Shanghai
     depends_on:
       - mysqldb
     networks:
@@ -45,4 +46,3 @@ networks:
 
 volumes:
   db_data:
-
