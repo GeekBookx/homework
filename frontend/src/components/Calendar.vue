@@ -56,75 +56,52 @@ import interactionPlugin from '@fullcalendar/interaction'
 const showModal = ref(false)
 const labs = ref([])
 const selectedInfo = ref({})
-const form = reactive({
-  labId: null,
-  reason: '',
-  repeatWeeks: 0
-})
+const form = reactive({ labId: null, reason: '', repeatWeeks: 0 })
 
-// 加载实验室列表供选择
+// 加载实验室列表
 onMounted(async () => {
   try {
     const res = await axios.get('/api/labs/list')
     labs.value = res.data
     if (labs.value.length > 0) form.labId = labs.value[0].id
-  } catch (e) {
-    console.error("加载实验室失败")
-  }
+  } catch (e) { console.error(e) }
 })
 
-// 提交逻辑 (含批量处理)
+// 提交预约逻辑
 const submitReservation = async () => {
   if (!form.reason) return alert("请填写实验内容")
   
   const user = JSON.parse(localStorage.getItem('user'))
   const reservations = []
   
-  // 核心：前端计算批量日期
   for (let i = 0; i <= form.repeatWeeks; i++) {
-    // 计算偏移毫秒数 (i * 7天 * 24小时...)
     const offset = i * 7 * 24 * 60 * 60 * 1000
-    
-    // 基于原始选择时间，加上偏移量
-    // 注意：FullCalendar 返回的是 ISO 字符串，可以直接解析
     const baseStart = new Date(selectedInfo.value.startStr).getTime()
     const baseEnd = new Date(selectedInfo.value.endStr).getTime()
-
-    // 转换回 ISO 格式发送给后端 (注意时区处理，简单起见这里用本地时间转 ISO)
-    // 实际项目中建议使用 moment.js 或 dayjs，这里用原生简化处理
-    const newStart = new Date(baseStart + offset)
-    const newEnd = new Date(baseEnd + offset)
-
+    
     reservations.push({
       labId: form.labId,
       userId: user.id,
-      startTime: toLocalIsoString(newStart),
-      endTime: toLocalIsoString(newEnd),
+      startTime: toLocalIsoString(new Date(baseStart + offset)),
+      endTime: toLocalIsoString(new Date(baseEnd + offset)),
       reason: form.reason + (i > 0 ? ` (第${i+1}周)` : '')
     })
   }
 
   try {
-    // 调用后端的批量接口
     await axios.post('/api/reservations/batch', reservations)
     alert("预约申请已提交！")
     closeModal()
-    // 刷新日历事件 (简单做法：重新加载页面，或者使用 calendarApi.refetchEvents())
     window.location.reload()
   } catch (err) {
     alert("预约失败：" + (err.response?.data?.message || "时间冲突或系统错误"))
   }
 }
 
-// 辅助函数：处理 JS Date 到类似于 '2023-12-01T10:00:00' 的格式
 function toLocalIsoString(date) {
   const pad = (num) => (num < 10 ? '0' : '') + num
-  return date.getFullYear() +
-    '-' + pad(date.getMonth() + 1) +
-    '-' + pad(date.getDate()) +
-    'T' + pad(date.getHours()) +
-    ':' + pad(date.getMinutes()) +
-    ':' + pad(date.getSeconds())
+  return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) +
+    'T' + pad(date.getHours()) + ':' + pad(date.getMinutes()) + ':' + pad(date.getSeconds())
 }
 
 const handleDateSelect = (selectInfo) => {
@@ -134,11 +111,34 @@ const handleDateSelect = (selectInfo) => {
 
 const closeModal = () => {
   showModal.value = false
-  // 清除日历上的选择高亮
   selectedInfo.value.view?.calendar.unselect()
 }
 
-// 日历配置
+// 🔥 核心修改：根据角色决定加载谁的数据
+const fetchEvents = async (info, success, failure) => {
+  try {
+    const user = JSON.parse(localStorage.getItem('user'));
+    let url = '/api/reservations/list'; // 默认：管理员/负责人看所有
+    
+    // 如果是学生或老师，只看自己的预约
+    if (user.role === 'STUDENT' || user.role === 'TEACHER') {
+      url = `/api/reservations/my?userId=${user.id}`;
+    }
+
+    const res = await axios.get(url);
+    const events = res.data.map(r => ({
+      // 如果是管理员看所有，标题加上申请人名字区分
+      title: (user.role === 'ADMIN' || user.role === 'MANAGER') 
+             ? `${r.username}: ${r.reason}` 
+             : `${r.reason} (${r.status})`,
+      start: r.startTime,
+      end: r.endTime,
+      color: r.status === 'APPROVED' ? '#67C23A' : (r.status === 'REJECTED' ? '#F56C6C' : '#E6A23C')
+    }))
+    success(events)
+  } catch (e) { failure(e) }
+}
+
 const calendarOptions = reactive({
   plugins: [ dayGridPlugin, timeGridPlugin, interactionPlugin ],
   initialView: 'timeGridWeek',
@@ -149,20 +149,7 @@ const calendarOptions = reactive({
   slotMinTime: '08:00:00',
   slotMaxTime: '22:00:00',
   select: handleDateSelect,
-  // 从后端加载事件显示在日历上
-  events: async (info, success, failure) => {
-    try {
-      const res = await axios.get('/api/reservations/list')
-      // 转换后端数据格式为 FullCalendar 格式
-      const events = res.data.map(r => ({
-        title: `${r.reason} (${r.status})`,
-        start: r.startTime,
-        end: r.endTime,
-        color: r.status === 'APPROVED' ? '#67C23A' : (r.status === 'REJECTED' ? '#F56C6C' : '#E6A23C')
-      }))
-      success(events)
-    } catch (e) { failure(e) }
-  }
+  events: fetchEvents // 使用新的加载函数
 })
 </script>
 
@@ -173,9 +160,7 @@ const calendarOptions = reactive({
   background: rgba(0,0,0,0.5); z-index: 999;
   display: flex; justify-content: center; align-items: center;
 }
-.modal-content {
-  background: white; padding: 30px; border-radius: 8px; width: 400px;
-}
+.modal-content { background: white; padding: 30px; border-radius: 8px; width: 400px; }
 .form-group { margin-bottom: 15px; display: flex; flex-direction: column; }
 input, select { padding: 8px; margin-top: 5px; border: 1px solid #ddd; }
 .actions { display: flex; justify-content: space-between; margin-top: 20px; }
