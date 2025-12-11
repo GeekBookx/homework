@@ -18,32 +18,34 @@ public class ReservationService {
     private ReservationMapper reservationMapper;
     
     @Autowired
-    private LabMapper labMapper; // 注入 LabMapper
+    private LabMapper labMapper;
 
-    // 检查实验室是否可用
-    private void checkLabAvailability(Long labId) {
+    // 核心逻辑：检查实验室容量与状态
+    private void checkLabAvailability(Long labId, LocalDateTime start, LocalDateTime end) {
         Lab lab = labMapper.findById(labId);
+        
+        // 1. 基础检查
         if (lab == null) {
             throw new RuntimeException("实验室不存在");
         }
         if (!lab.getIsActive()) {
             throw new RuntimeException("该实验室处于维护期，暂停预约！");
         }
-    }
 
-    public boolean checkConflict(Long labId, LocalDateTime startTime, LocalDateTime endTime) {
-        return reservationMapper.countOverlapping(labId, startTime, endTime) > 0;
+        // 2. 容量检查 (关键修复)
+        // 查询该时间段已有的有效预约数量
+        int currentBookings = reservationMapper.countOverlapping(labId, start, end);
+        
+        // 如果已预约人数 >= 实验室容量，则禁止预约
+        if (currentBookings >= lab.getCapacity()) {
+            throw new RuntimeException("预约失败：该时段实验室已满 (容量: " + lab.getCapacity() + ", 已约: " + currentBookings + ")");
+        }
     }
 
     @Transactional
     public void createReservation(Reservation res) {
-        // 1. 检查维护期
-        checkLabAvailability(res.getLabId());
-
-        // 2. 冲突检测
-        if (checkConflict(res.getLabId(), res.getStartTime(), res.getEndTime())) {
-            throw new RuntimeException("该时间段已被预约，请选择其他时间！");
-        }
+        // 执行检查
+        checkLabAvailability(res.getLabId(), res.getStartTime(), res.getEndTime());
         
         res.setStatus("PENDING");
         res.setCreatedAt(LocalDateTime.now());
@@ -54,13 +56,10 @@ public class ReservationService {
     public void batchCreateReservation(List<Reservation> reservationList) {
         if (reservationList.isEmpty()) return;
         
-        // 批量预约前检查一次维护期即可
-        checkLabAvailability(reservationList.get(0).getLabId());
-
         for (Reservation res : reservationList) {
-            if (checkConflict(res.getLabId(), res.getStartTime(), res.getEndTime())) {
-                throw new RuntimeException("批量预约失败：时间 " + res.getStartTime() + " 存在冲突");
-            }
+            // 对每个时间段都独立检查容量
+            checkLabAvailability(res.getLabId(), res.getStartTime(), res.getEndTime());
+            
             res.setStatus("PENDING");
             res.setCreatedAt(LocalDateTime.now());
             reservationMapper.insert(res);
