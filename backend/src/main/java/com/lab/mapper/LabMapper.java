@@ -9,6 +9,9 @@ public interface LabMapper {
     @Select("SELECT * FROM labs")
     List<Lab> findAll();
 
+    @Select("SELECT * FROM labs WHERE id = #{id}")
+    Lab findById(Long id); // <--- 新增这个方法
+
     @Insert("INSERT INTO labs(name, capacity, equipment_list, is_active, description) " +
             "VALUES(#{name}, #{capacity}, #{equipmentList}, #{isActive}, #{description})")
     void insert(Lab lab);
