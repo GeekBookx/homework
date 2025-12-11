@@ -10,12 +10,11 @@ public class Reservation {
     private Long userId;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
-    private String status; // PENDING, APPROVED, REJECTED
+    private String status; 
     private String reason;
     private LocalDateTime createdAt;
 
-    // --- 新增字段 ---
-    // 这个字段在数据库 reservations 表里不存在
-    // 但 MyBatis 执行关联查询时，会自动把 users 表的 full_name 映射到这里
-    private String username; 
+    // --- 非数据库字段 (用于关联查询展示) ---
+    private String username; // 申请人姓名
+    private String labName;  // 实验室名称
 }
