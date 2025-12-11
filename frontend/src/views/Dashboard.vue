@@ -87,7 +87,10 @@
         </div>
 
         <div class="panel full-width">
-          <h3>📊 实验室使用热度统计</h3>
+          <div class="panel-header">
+            <h3>📊 实验室使用热度统计</h3>
+            <button class="btn-text" @click="exportReport">📥 导出报表</button>
+          </div>
           <div class="chart-container">
             <div v-for="stat in stats" :key="stat.name" class="bar-group">
               <div class="bar-label">{{ stat.name }}</div>
@@ -186,6 +189,24 @@ const toggleLab = async (lab) => {
 const approveUser = async (id) => {
   await axios.post(`/api/admin/users/approve/${id}`);
   loadPendingUsers();
+};
+
+// --- 新增：导出报表功能 ---
+const exportReport = () => {
+  // 简单的 CSV 导出逻辑
+  let csvContent = "data:text/csv;charset=utf-8,";
+  csvContent += "实验室名称,预约次数\n";
+  stats.value.forEach(row => {
+    csvContent += `${row.name},${row.count}\n`;
+  });
+  
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", "lab_report.csv");
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 };
 </script>
 
