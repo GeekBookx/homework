@@ -1,3 +1,4 @@
+SET NAMES utf8mb4;
 CREATE DATABASE IF NOT EXISTS lab_reservation DEFAULT CHARSET utf8mb4;
 USE lab_reservation;
 
@@ -51,4 +52,5 @@ INSERT INTO users (username, password, role, full_name, status)
 VALUES ('admin', 'admin123', 'ADMIN', '系统管理员', 1);
 
 -- 初始化一条公告
+
 INSERT INTO announcements (content, is_current) VALUES ('欢迎使用高校实验室预约管理系统，请规范使用设备。', 1);
