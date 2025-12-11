@@ -41,17 +41,29 @@ onMounted(async () => {
 const handleLogin = async () => {
   try {
     const res = await axios.post('/api/users/login', form.value);
-    // 登录成功，保存用户信息到本地
     localStorage.setItem('user', JSON.stringify(res.data));
-    
-    // 题目要求：注册需要审核，如果是负责人且未审核通过，后端会报错
     alert('登录成功');
     router.push('/dashboard');
   } catch (err) {
-    alert(err.response?.data || '登录失败');
+    // 智能解析错误信息
+    const errorData = err.response?.data;
+    let msg = '登录失败';
+    
+    if (errorData) {
+      // 优先显示后端传回来的 message
+      if (errorData.message) {
+        msg = errorData.message;
+      } else if (typeof errorData === 'string') {
+        msg = errorData;
+      } else {
+        // 如果还是对象，转成字符串方便调试，不再显示 [object Object]
+        msg = JSON.stringify(errorData);
+      }
+    }
+    alert(msg);
+    console.error(err); // 在控制台打印完整错误，方便你截图给我看
   }
 };
-</script>
 
 <style scoped>
 /* 简单的左右布局样式 */
@@ -59,4 +71,5 @@ const handleLogin = async () => {
 .notice-board { width: 40%; background: #f0f2f5; padding: 40px; }
 .login-form { width: 60%; display: flex; flex-direction: column; justify-content: center; padding: 100px; }
 input { margin-bottom: 15px; padding: 10px; }
+
 </style>
