@@ -13,20 +13,20 @@ services:
     networks:
       - lab-net
 
-  backend:
+backend:
     build: ./backend
     container_name: lab_backend
     ports:
       - "8080:8080"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysqldb:3306/lab_reservation?useSSL=false
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysqldb:3306/lab_reservation?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: rootpassword
     depends_on:
       - mysqldb
     networks:
       - lab-net
-
+      
   frontend:
     build: ./frontend
     container_name: lab_frontend
@@ -42,4 +42,5 @@ networks:
     driver: bridge
 
 volumes:
+
   db_data:
