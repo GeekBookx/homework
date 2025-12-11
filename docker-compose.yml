@@ -5,28 +5,31 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: lab_reservation
+      TZ: Asia/Shanghai  # <--- 修改1: 数据库容器设为北京时间
     volumes:
       - db_data:/var/lib/mysql
-      - ./mysql/init:/docker-entrypoint-initdb.d # 自动初始化SQL
+      - ./mysql/init:/docker-entrypoint-initdb.d
     ports:
       - "3306:3306"
     networks:
       - lab-net
 
-backend:
+  backend:
     build: ./backend
     container_name: lab_backend
     ports:
       - "8080:8080"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysqldb:3306/lab_reservation?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      # 修改2: JDBC URL 改为 Asia/Shanghai
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysqldb:3306/lab_reservation?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: rootpassword
+      TZ: Asia/Shanghai  # <--- 修改3: Java 后端容器设为北京时间
     depends_on:
       - mysqldb
     networks:
       - lab-net
-      
+
   frontend:
     build: ./frontend
     container_name: lab_frontend
@@ -42,5 +45,4 @@ networks:
     driver: bridge
 
 volumes:
-
   db_data:
