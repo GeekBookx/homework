@@ -41,6 +41,7 @@ onMounted(async () => {
 const handleLogin = async () => {
   try {
     const res = await axios.post('/api/users/login', form.value);
+    // 登录成功，保存用户信息到本地
     localStorage.setItem('user', JSON.stringify(res.data));
     alert('登录成功');
     router.push('/dashboard');
@@ -61,15 +62,13 @@ const handleLogin = async () => {
       }
     }
     alert(msg);
-    console.error(err); // 在控制台打印完整错误，方便你截图给我看
+    console.error(err);
   }
 };
-
-<style scoped>
+</script> <style scoped>
 /* 简单的左右布局样式 */
 .login-container { display: flex; height: 100vh; }
 .notice-board { width: 40%; background: #f0f2f5; padding: 40px; }
 .login-form { width: 60%; display: flex; flex-direction: column; justify-content: center; padding: 100px; }
 input { margin-bottom: 15px; padding: 10px; }
-
 </style>
