@@ -8,12 +8,17 @@
         <p>时间：{{ selectedInfo.startStr }} 至 {{ selectedInfo.endStr }}</p>
         
         <div class="form-group">
-          <label>选择实验室：</label>
+          <label>选择实验室（实时剩余容量）：</label>
           <select v-model="form.labId">
-            <option v-for="lab in labs" :key="lab.id" :value="lab.id">
-              {{ lab.name }} (容量:{{ lab.capacity }})
+            <option v-for="lab in labs" :key="lab.id" :value="lab.id" :disabled="lab.remaining <= 0 || !lab.isActive">
+              {{ lab.name }} 
+              <template v-if="!lab.isActive">[维护中]</template>
+              <template v-else> (余: {{ lab.remaining }} / 总: {{ lab.capacity }})</template>
             </option>
           </select>
+          <small v-if="selectedLab && selectedLab.remaining <= 0" style="color: red;">
+            该时段已满，请选择其他实验室或时间
+          </small>
         </div>
 
         <div class="form-group">
@@ -31,13 +36,13 @@
             <option :value="4">重复 4 周 (一个月)</option>
           </select>
           <small v-if="form.repeatWeeks > 0">
-            ⚠️ 将自动预约未来 {{ form.repeatWeeks }} 周的同一时段
+            ⚠️ 注意：后续周次的容量情况以提交时系统检测为准
           </small>
         </div>
 
         <div class="actions">
           <button @click="closeModal" class="cancel">取消</button>
-          <button @click="submitReservation" class="confirm">提交申请</button>
+          <button @click="submitReservation" class="confirm" :disabled="!form.labId">提交申请</button>
         </div>
       </div>
     </div>
@@ -45,7 +50,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import axios from 'axios'
 import FullCalendar from '@fullcalendar/vue3'
 import dayGridPlugin from '@fullcalendar/daygrid'
@@ -54,20 +59,14 @@ import interactionPlugin from '@fullcalendar/interaction'
 
 // 状态管理
 const showModal = ref(false)
-const labs = ref([])
+const labs = ref([]) // 这里现在存的是带有 remaining 信息的列表
 const selectedInfo = ref({})
 const form = reactive({ labId: null, reason: '', repeatWeeks: 0 })
 
-// 加载实验室列表
-onMounted(async () => {
-  try {
-    const res = await axios.get('/api/labs/list')
-    labs.value = res.data
-    if (labs.value.length > 0) form.labId = labs.value[0].id
-  } catch (e) { console.error(e) }
-})
+// 计算属性：当前选中的实验室对象
+const selectedLab = computed(() => labs.value.find(l => l.id === form.labId))
 
-// 提交预约逻辑
+// 提交逻辑
 const submitReservation = async () => {
   if (!form.reason) return alert("请填写实验内容")
   
@@ -104,9 +103,34 @@ function toLocalIsoString(date) {
     'T' + pad(date.getHours()) + ':' + pad(date.getMinutes()) + ':' + pad(date.getSeconds())
 }
 
-const handleDateSelect = (selectInfo) => {
+// 🔥 核心修改：点击日历时，先去后端查容量，再弹窗
+const handleDateSelect = async (selectInfo) => {
   selectedInfo.value = selectInfo
-  showModal.value = true
+  
+  // 1. 获取该时间段的实验室容量情况
+  try {
+    // 转换 FullCalendar 的时间字符串为 ISO 格式发给后端
+    // 注意：FullCalendar 的 selectInfo.startStr 可能是 '2023-12-01T10:00:00+08:00'，我们需要截取或处理
+    // 简单处理：直接传 selectInfo.startStr，Spring Boot 应该能解析 ISO 格式
+    const res = await axios.get('/api/labs/available', {
+      params: {
+        start: selectInfo.startStr,
+        end: selectInfo.endStr
+      }
+    })
+    
+    labs.value = res.data
+    
+    // 自动选择第一个有空位且开放的实验室
+    const firstAvailable = labs.value.find(l => l.remaining > 0 && l.isActive)
+    form.labId = firstAvailable ? firstAvailable.id : null
+    
+    // 2. 显示弹窗
+    showModal.value = true
+  } catch (e) {
+    alert('无法加载实验室数据，请稍后重试')
+    console.error(e)
+  }
 }
 
 const closeModal = () => {
@@ -114,27 +138,26 @@ const closeModal = () => {
   selectedInfo.value.view?.calendar.unselect()
 }
 
-// 🔥 核心修改：根据角色决定加载谁的数据
+// 加载事件：过滤掉 REJECTED
 const fetchEvents = async (info, success, failure) => {
   try {
     const user = JSON.parse(localStorage.getItem('user'));
-    let url = '/api/reservations/list'; // 默认：管理员/负责人看所有
-    
-    // 如果是学生或老师，只看自己的预约
+    let url = '/api/reservations/list'; 
     if (user.role === 'STUDENT' || user.role === 'TEACHER') {
       url = `/api/reservations/my?userId=${user.id}`;
     }
 
     const res = await axios.get(url);
-    const events = res.data.map(r => ({
-      // 如果是管理员看所有，标题加上申请人名字区分
-      title: (user.role === 'ADMIN' || user.role === 'MANAGER') 
+    const events = res.data
+      .filter(r => r.status !== 'REJECTED') // 🔥 关键：过滤掉已驳回的
+      .map(r => ({
+        title: (user.role === 'ADMIN' || user.role === 'MANAGER') 
              ? `${r.username}: ${r.reason}` 
              : `${r.reason} (${r.status})`,
-      start: r.startTime,
-      end: r.endTime,
-      color: r.status === 'APPROVED' ? '#67C23A' : (r.status === 'REJECTED' ? '#F56C6C' : '#E6A23C')
-    }))
+        start: r.startTime,
+        end: r.endTime,
+        color: r.status === 'APPROVED' ? '#67C23A' : '#E6A23C' // 既然没Rejected了，就只剩绿和黄
+      }))
     success(events)
   } catch (e) { failure(e) }
 }
@@ -149,7 +172,7 @@ const calendarOptions = reactive({
   slotMinTime: '08:00:00',
   slotMaxTime: '22:00:00',
   select: handleDateSelect,
-  events: fetchEvents // 使用新的加载函数
+  events: fetchEvents
 })
 </script>
 
@@ -166,5 +189,6 @@ input, select { padding: 8px; margin-top: 5px; border: 1px solid #ddd; }
 .actions { display: flex; justify-content: space-between; margin-top: 20px; }
 button { padding: 8px 20px; border: none; border-radius: 4px; cursor: pointer; }
 .confirm { background: #409EFF; color: white; }
+.confirm:disabled { background: #ccc; cursor: not-allowed; }
 .cancel { background: #f4f4f5; }
 </style>
