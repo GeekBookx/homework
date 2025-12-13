@@ -190,10 +190,22 @@ const rejectUser = async (id) => {
   }
 };
 
+// 🔥 修复：导出报表增加 BOM 头解决乱码
 const exportReport = () => {
-  let csvContent = "data:text/csv;charset=utf-8,实验室名称,预约次数\n";
-  stats.value.forEach(row => { csvContent += `${row.name},${row.count}\n`; });
-  const link = document.createElement("a"); link.href = encodeURI(csvContent); link.download = "lab_report.csv"; link.click();
+  let csvContent = "实验室名称,预约次数\n";
+  stats.value.forEach(row => {
+    csvContent += `${row.name},${row.count}\n`;
+  });
+
+  // 添加 \uFEFF (BOM) 解决 Windows Excel 打开 UTF-8 CSV 乱码的问题
+  const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+  
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "lab_report.csv";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 };
 </script>
 
