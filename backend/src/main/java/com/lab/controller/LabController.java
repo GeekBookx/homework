@@ -1,11 +1,17 @@
 package com.lab.controller;
 
-import com.lab.entity.Lab; // 需要你自己创建 Lab 实体类
-import com.lab.mapper.LabMapper; // 需要你自己创建 LabMapper
+import com.lab.entity.Lab;
+import com.lab.mapper.LabMapper;
+import com.lab.mapper.ReservationMapper; // 引入 ReservationMapper
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/labs")
@@ -14,34 +20,59 @@ public class LabController {
     @Autowired
     private LabMapper labMapper;
 
-    // 1. 获取实验室列表 (用于预约页面下拉框 + 管理员列表)
+    @Autowired
+    private ReservationMapper reservationMapper; // 注入预约Mapper用于统计
+
+    // 1. 获取所有实验室列表 (基础接口)
     @GetMapping("/list")
     public List<Lab> getLabs() {
-        // SQL: SELECT * FROM labs
         return labMapper.findAll();
     }
 
-    // 2. 添加实验室 (管理员)
+    // 2. [新增] 获取某时段实验室可用容量
+    @GetMapping("/available")
+    public List<Map<String, Object>> getAvailableLabs(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end) {
+        
+        List<Lab> allLabs = labMapper.findAll();
+        List<Map<String, Object>> result = new ArrayList<>();
+
+        for (Lab lab : allLabs) {
+            // 查询该时间段已占用的数量
+            int used = reservationMapper.countOverlapping(lab.getId(), start, end);
+            // 计算剩余容量 (不小于0)
+            int remaining = Math.max(0, lab.getCapacity() - used);
+
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", lab.getId());
+            map.put("name", lab.getName());
+            map.put("capacity", lab.getCapacity());
+            map.put("remaining", remaining); // 返回剩余量
+            map.put("isActive", lab.getIsActive());
+            
+            result.add(map);
+        }
+        return result;
+    }
+
+    // 3. 添加实验室
     @PostMapping("/add")
     public String addLab(@RequestBody Lab lab) {
-        // SQL: INSERT INTO labs ...
         labMapper.insert(lab);
         return "实验室添加成功";
     }
 
-    // 3. 删除实验室 (管理员)
+    // 4. 删除实验室
     @DeleteMapping("/{id}")
     public String deleteLab(@PathVariable Long id) {
-        // SQL: DELETE FROM labs WHERE id = #{id}
         labMapper.deleteById(id);
         return "实验室已删除";
     }
 
-    // 4. 更新维护状态 (负责人/管理员)
+    // 5. 更新状态
     @PostMapping("/update/{id}")
     public String updateLabStatus(@PathVariable Long id, @RequestBody Lab lab) {
-        // 题目要求：设置实验室维护期（暂停预约）
-        // SQL: UPDATE labs SET is_active = #{isActive} WHERE id = #{id}
         labMapper.updateStatus(id, lab.getIsActive());
         return "状态更新成功";
     }
