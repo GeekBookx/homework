@@ -13,7 +13,7 @@ import java.util.Map;
 @Mapper
 public interface ReservationMapper {
 
-    // 1. 核心冲突检测
+    // 1. 统计某时段某实验室的已预约人数 (用于容量判断)
     @Select("SELECT COUNT(*) FROM reservations " +
             "WHERE lab_id = #{labId} " +
             "AND status != 'REJECTED' " +
@@ -25,13 +25,22 @@ public interface ReservationMapper {
             "VALUES(#{labId}, #{userId}, #{startTime}, #{endTime}, #{status}, #{reason}, #{createdAt})")
     void insert(Reservation reservation);
 
-    // 3. 查询所有 (关联实验室名称，供日历显示详细信息)
-    @Select("SELECT r.*, l.name as labName " +
+    // 3. 查询所有 (关联实验室名称)
+    @Select("SELECT r.*, l.name as labName, u.full_name as username " +
             "FROM reservations r " +
-            "LEFT JOIN labs l ON r.lab_id = l.id")
+            "LEFT JOIN labs l ON r.lab_id = l.id " +
+            "LEFT JOIN users u ON r.user_id = u.id")
     List<Reservation> findAll();
 
-    // 4. 待审核列表 (关联用户和实验室)
+    // 4. [新增] 查询某个用户的预约记录 (学生端用)
+    @Select("SELECT r.*, l.name as labName " +
+            "FROM reservations r " +
+            "LEFT JOIN labs l ON r.lab_id = l.id " +
+            "WHERE r.user_id = #{userId} " +
+            "ORDER BY r.start_time DESC")
+    List<Reservation> findByUserId(Long userId);
+
+    // 5. 待审核列表 (负责人用)
     @Select("SELECT r.*, u.full_name as username, l.name as labName " +
             "FROM reservations r " +
             "LEFT JOIN users u ON r.user_id = u.id " +
@@ -39,11 +48,11 @@ public interface ReservationMapper {
             "WHERE r.status = #{status}")
     List<Reservation> findByStatus(String status);
 
-    // 5. 更新状态
+    // 6. 更新状态
     @Update("UPDATE reservations SET status = #{status} WHERE id = #{id}")
     void updateStatus(Long id, String status);
 
-    // 6. [统计图表] 统计每个实验室的预约数量
+    // 7. 统计图表数据
     @Select("SELECT l.name, COUNT(r.id) as count " +
             "FROM labs l " +
             "LEFT JOIN reservations r ON l.id = r.lab_id " +

@@ -17,7 +17,7 @@ public interface UserMapper {
             "VALUES(#{username}, #{password}, #{role}, #{fullName}, #{status})")
     void insert(User user);
 
-    // --- 新增 Admin 方法 ---
+    // --- Admin 方法 ---
     
     @Select("SELECT * FROM users WHERE status = 0")
     List<User> findPendingUsers();
@@ -25,7 +25,10 @@ public interface UserMapper {
     @Update("UPDATE users SET status = 1 WHERE id = #{id}")
     void approveUser(Long id);
 
-    // 简单的统计数据：按角色统计人数 (示例)
+    // 🔥 新增：拒绝用户（状态设为2）
+    @Update("UPDATE users SET status = 2 WHERE id = #{id}")
+    void rejectUser(Long id);
+
     @Select("SELECT role, COUNT(*) as count FROM users GROUP BY role")
     List<Object> getStats(); 
 }
